@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Companion Ride",
+    "slug": "companion-ride",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8FAFC"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.companionride.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Companion Ride needs your location to find nearby travel companions and carpools going your way."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2563EB"
+      },
+      "package": "com.companionride.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Companion Ride uses your location to discover rides and companions travelling the same route."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "companion-ride-prod-id"
+      }
+    }
+  }
+}
