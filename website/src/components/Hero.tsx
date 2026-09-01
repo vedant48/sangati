@@ -27,19 +27,20 @@ export const Hero = () => {
             </p>
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
-              <Link
-                href="#download"
-                className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-aiBlue text-white font-bold text-base hover:bg-aiBlue-hover transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+              <a
+                href="/SangatiCompanionRide.apk"
+                download="SangatiCompanionRide.apk"
+                className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-aiBlue text-white font-bold text-base hover:bg-aiBlue-hover transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Find a Companion</span>
-                <span>→</span>
-              </Link>
+                <span>⬇️</span>
+                <span>Download Android APK</span>
+              </a>
               <Link
-                href="#download"
+                href="/download"
                 className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-white border border-lightSlate text-deepGraphite font-bold text-base hover:bg-slate-50 transition-all shadow-sm flex items-center justify-center gap-2"
               >
-                <span>Offer a Ride</span>
-                <span>🚘</span>
+                <span>Install Guide</span>
+                <span>📱</span>
               </Link>
             </div>
 

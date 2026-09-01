@@ -1,6 +1,6 @@
-// Matching Service for PostGIS Spatial & Routing Engine
+// Pure Supabase Matching Service with Spatial & Routing Engine
 
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { RideSearchResult, SearchFilters, Ride } from '../types';
 import { 
   calculateDistanceMeters, 
@@ -8,7 +8,6 @@ import {
   calculateCompatibilityScore 
 } from '../utils/calculations';
 import { AppConfig } from '../constants/config';
-import { getMockRides } from './mockRides';
 
 export async function searchMatchingRides(
   filters: SearchFilters,
@@ -24,59 +23,71 @@ export async function searchMatchingRides(
     timeWindowMinutes = AppConfig.matching.defaultTimeWindowMinutes,
   } = filters;
 
-  if (isSupabaseConfigured) {
-    try {
-      const { data, error } = await supabase.rpc('find_matching_rides', {
-        p_pickup_lat: pickup.latitude,
-        p_pickup_lng: pickup.longitude,
-        p_dest_lat: destination.latitude,
-        p_dest_lng: destination.longitude,
-        p_departure_time: departureTime.toISOString(),
-        p_seats_needed: seatsNeeded,
-        p_pickup_radius_km: pickupRadiusKm,
-        p_dest_radius_km: destRadiusKm,
-        p_time_window_minutes: timeWindowMinutes,
-        p_user_id: currentUserId || null,
-      });
+  // 1. Try PostgreSQL PostGIS RPC if created
+  try {
+    const { data, error } = await supabase.rpc('find_matching_rides', {
+      p_pickup_lat: pickup.latitude,
+      p_pickup_lng: pickup.longitude,
+      p_dest_lat: destination.latitude,
+      p_dest_lng: destination.longitude,
+      p_departure_time: departureTime.toISOString(),
+      p_seats_needed: seatsNeeded,
+      p_pickup_radius_km: pickupRadiusKm,
+      p_dest_radius_km: destRadiusKm,
+      p_time_window_minutes: timeWindowMinutes,
+      p_user_id: currentUserId || null,
+    });
 
-      if (!error && Array.isArray(data)) {
-        return data.map((r: any) => ({
-          id: r.r_id,
-          creator_id: r.r_creator_id,
-          creator_name: r.r_creator_name,
-          creator_avatar: r.r_creator_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-          creator_rating: Number(r.r_creator_rating) || 5.0,
-          creator_total_ratings: Number(r.r_creator_total_ratings) || 0,
-          creator_is_verified: Boolean(r.r_creator_is_verified),
-          pickup_name: r.r_pickup_name,
-          pickup_lat: r.r_pickup_lat,
-          pickup_lng: r.r_pickup_lng,
-          destination_name: r.r_destination_name,
-          destination_lat: r.r_destination_lat,
-          destination_lng: r.r_destination_lng,
-          departure_time: r.r_departure_time,
-          available_seats: r.r_available_seats,
-          total_seats: r.r_total_seats,
-          ride_type: r.r_ride_type,
-          contribution_amount: Number(r.r_contribution_amount) || 0,
-          notes: r.r_notes,
-          vehicle_info: r.r_vehicle_info,
-          status: r.r_status,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          pickup_distance_meters: r.p_dist,
-          dest_distance_meters: r.d_dist,
-          time_diff_minutes: r.t_diff,
-          compatibility_score: Number(r.compatibility_score) || 80,
-        }));
-      }
-    } catch (e) {
-      console.warn('RPC matching failed, falling back to local PostGIS simulation:', e);
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return data.map((r: any) => ({
+        id: r.r_id,
+        creator_id: r.r_creator_id,
+        creator_name: r.r_creator_name,
+        creator_avatar: r.r_creator_avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+        creator_rating: Number(r.r_creator_rating) || 5.0,
+        creator_total_ratings: Number(r.r_creator_total_ratings) || 0,
+        creator_is_verified: Boolean(r.r_creator_is_verified),
+        pickup_name: r.r_pickup_name,
+        pickup_lat: r.r_pickup_lat,
+        pickup_lng: r.r_pickup_lng,
+        destination_name: r.r_destination_name,
+        destination_lat: r.r_destination_lat,
+        destination_lng: r.r_destination_lng,
+        departure_time: r.r_departure_time,
+        available_seats: r.r_available_seats,
+        total_seats: r.r_total_seats,
+        ride_type: r.r_ride_type,
+        contribution_amount: Number(r.r_contribution_amount) || 0,
+        notes: r.r_notes,
+        vehicle_info: r.r_vehicle_info,
+        status: r.r_status,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        pickup_distance_meters: r.p_dist,
+        dest_distance_meters: r.d_dist,
+        time_diff_minutes: r.t_diff,
+        compatibility_score: Number(r.compatibility_score) || 80,
+      }));
     }
+  } catch (e) {
+    console.warn('RPC matching check, querying direct Supabase table:', e);
   }
 
-  // Local PostGIS Simulation Engine (Mirrors exact PostgreSQL PostGIS RPC logic)
-  const candidateRides = await getMockRides();
+  // 2. Direct Supabase Query with client-side Spatial Geometry Engine
+  let candidateRides: Ride[] = [];
+  try {
+    const { data, error } = await supabase
+      .from('rides')
+      .select('*, creator:profiles(*)')
+      .eq('status', 'active');
+
+    if (!error && data) {
+      candidateRides = data as Ride[];
+    }
+  } catch (e) {
+    console.warn('Error querying Supabase rides table:', e);
+  }
+
   const results: RideSearchResult[] = [];
 
   for (const ride of candidateRides) {
@@ -105,7 +116,7 @@ export async function searchMatchingRides(
     const filterTime = departureTime.getTime();
     const tDiff = Math.abs(rideTime - filterTime) / (60 * 1000);
 
-    // Filter thresholds (configurable)
+    // Filter thresholds
     if (pDist > pickupRadiusKm * 1000) continue;
     if (dDist > destRadiusKm * 1000) continue;
     if (tDiff > timeWindowMinutes) continue;
@@ -118,7 +129,7 @@ export async function searchMatchingRides(
       { lat: destination.latitude, lng: destination.longitude }
     );
 
-    if (dirSim < 0.1) continue; // Skip opposite route directions
+    if (dirSim < 0.1) continue;
 
     // 5. Total Compatibility Score
     const score = calculateCompatibilityScore({
@@ -133,11 +144,11 @@ export async function searchMatchingRides(
 
     results.push({
       ...ride,
-      creator_name: ride.creator?.full_name || 'Verified Driver',
+      creator_name: ride.creator?.full_name || 'Driver',
       creator_avatar: ride.creator?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-      creator_rating: ride.creator?.rating || 4.9,
-      creator_total_ratings: ride.creator?.total_ratings || 10,
-      creator_is_verified: ride.creator?.is_identity_verified ?? true,
+      creator_rating: ride.creator?.rating || 5.0,
+      creator_total_ratings: ride.creator?.total_ratings || 0,
+      creator_is_verified: ride.creator?.is_identity_verified ?? false,
       pickup_distance_meters: pDist,
       dest_distance_meters: dDist,
       time_diff_minutes: tDiff,

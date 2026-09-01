@@ -18,8 +18,10 @@ import { signUpWithEmail } from '../../services/authService';
 import { useAuth } from '../../context/AuthContext';
 import { isValidEmail } from '../../utils/validation';
 
+import { Alert } from 'react-native';
+
 export const RegisterScreen = ({ navigation }: any) => {
-  const { refreshUser } = useAuth();
+  const { signup } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,25 +30,39 @@ export const RegisterScreen = ({ navigation }: any) => {
 
   const handleRegister = async () => {
     if (!fullName.trim() || fullName.trim().length < 2) {
-      setError('Please enter your full name.');
+      const msg = 'Please enter your full name.';
+      setError(msg);
+      Alert.alert('Validation Error', msg);
       return;
     }
     if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+      const msg = 'Please enter a valid email address.';
+      setError(msg);
+      Alert.alert('Validation Error', msg);
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      const msg = 'Password must be at least 6 characters.';
+      setError(msg);
+      Alert.alert('Validation Error', msg);
       return;
     }
 
     setError('');
     setLoading(true);
     try {
-      await signUpWithEmail(email, password, fullName);
-      await refreshUser();
+      const res = await signup(email, password, fullName);
+      if (!res?.session) {
+        Alert.alert(
+          'Account Created! 🎉',
+          'Your account has been created successfully.',
+          [{ text: 'Continue', onPress: () => navigation.navigate('Login') }]
+        );
+      }
     } catch (err: any) {
-      setError(err.message || 'Registration failed.');
+      const msg = err.message || 'Registration failed. Please try again.';
+      setError(msg);
+      Alert.alert('Registration Failed', msg);
     } finally {
       setLoading(false);
     }

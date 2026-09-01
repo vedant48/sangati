@@ -20,18 +20,22 @@ import { isValidEmail } from '../../utils/validation';
 
 export const LoginScreen = ({ navigation }: any) => {
   const { login } = useAuth();
-  const [email, setEmail] = useState('rahul.kumar@example.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleLogin = async () => {
     if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+      const msg = 'Please enter a valid email address.';
+      setError(msg);
+      Alert.alert('Invalid Email', msg);
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      const msg = 'Password must be at least 6 characters.';
+      setError(msg);
+      Alert.alert('Invalid Password', msg);
       return;
     }
 
@@ -40,7 +44,9 @@ export const LoginScreen = ({ navigation }: any) => {
     try {
       await login(email, password);
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+      const msg = err.message || 'Login failed. Please check your credentials.';
+      setError(msg);
+      Alert.alert('Login Failed', msg);
     } finally {
       setLoading(false);
     }

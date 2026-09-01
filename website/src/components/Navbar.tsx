@@ -24,27 +24,29 @@ export const Navbar = () => {
 
         {/* Desktop Nav Links */}
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slateGrey">
-          <Link href="#how-it-works" className="hover:text-aiBlue transition-colors">
+          <Link href="/#how-it-works" className="hover:text-aiBlue transition-colors">
             How It Works
           </Link>
-          <Link href="#safety" className="hover:text-aiBlue transition-colors">
+          <Link href="/#safety" className="hover:text-aiBlue transition-colors">
             Safety & Trust
           </Link>
-          <Link href="#faq" className="hover:text-aiBlue transition-colors">
+          <Link href="/#faq" className="hover:text-aiBlue transition-colors">
             FAQ
           </Link>
-          <Link href="#download" className="hover:text-aiBlue transition-colors">
-            Download App
+          <Link href="/download" className="hover:text-aiBlue transition-colors font-semibold text-deepGraphite flex items-center gap-1.5">
+            <span>📱</span>
+            <span>Download APK</span>
           </Link>
         </nav>
 
         {/* CTA Buttons */}
         <div className="hidden sm:flex items-center gap-3">
           <Link
-            href="#download"
-            className="px-4 py-2 rounded-lg bg-aiBlue text-white text-sm font-semibold hover:bg-aiBlue-hover transition-all shadow-sm"
+            href="/download"
+            className="px-4 py-2 rounded-lg bg-aiBlue text-white text-sm font-semibold hover:bg-aiBlue-hover transition-all shadow-sm flex items-center gap-1.5"
           >
-            Get Android App
+            <span>⬇️</span>
+            <span>Get APK (v1.0.0)</span>
           </Link>
         </div>
 
@@ -61,32 +63,32 @@ export const Navbar = () => {
       {mobileMenuOpen && (
         <div className="md:hidden bg-surface border-b border-lightSlate px-4 py-4 space-y-3">
           <Link
-            href="#how-it-works"
+            href="/#how-it-works"
             onClick={() => setMobileMenuOpen(false)}
             className="block text-sm font-medium text-deepGraphite"
           >
             How It Works
           </Link>
           <Link
-            href="#safety"
+            href="/#safety"
             onClick={() => setMobileMenuOpen(false)}
             className="block text-sm font-medium text-deepGraphite"
           >
             Safety & Trust
           </Link>
           <Link
-            href="#faq"
+            href="/#faq"
             onClick={() => setMobileMenuOpen(false)}
             className="block text-sm font-medium text-deepGraphite"
           >
             FAQ
           </Link>
           <Link
-            href="#download"
+            href="/download"
             onClick={() => setMobileMenuOpen(false)}
-            className="block w-full text-center px-4 py-2 rounded-lg bg-aiBlue text-white text-sm font-semibold"
+            className="block w-full text-center px-4 py-2.5 rounded-lg bg-aiBlue text-white text-sm font-semibold"
           >
-            Get Android App
+            ⬇️ Download Android APK
           </Link>
         </div>
       )}

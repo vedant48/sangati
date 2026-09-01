@@ -1,8 +1,10 @@
 -- Companion Ride Database Schema & PostGIS Extensions
--- Production-Ready Schema Migration
+-- Production-Ready Schema Migration for Supabase
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "postgis";
+-- 0. EXTENSIONS & SEARCH PATH
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS "postgis" WITH SCHEMA extensions;
+SET search_path TO public, extensions;
 
 -- 1. PROFILES
 CREATE TABLE IF NOT EXISTS public.profiles (
@@ -27,16 +29,16 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 -- 2. RIDES
 CREATE TABLE IF NOT EXISTS public.rides (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     creator_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     pickup_name TEXT NOT NULL,
     pickup_lat DOUBLE PRECISION NOT NULL,
     pickup_lng DOUBLE PRECISION NOT NULL,
-    pickup_geom GEOMETRY(Point, 4326) GENERATED ALWAYS AS (ST_SetSRID(ST_MakePoint(pickup_lng, pickup_lat), 4326)) STORED,
+    pickup_geom extensions.geometry(Point, 4326) GENERATED ALWAYS AS (extensions.ST_SetSRID(extensions.ST_MakePoint(pickup_lng, pickup_lat), 4326)) STORED,
     destination_name TEXT NOT NULL,
     destination_lat DOUBLE PRECISION NOT NULL,
     destination_lng DOUBLE PRECISION NOT NULL,
-    destination_geom GEOMETRY(Point, 4326) GENERATED ALWAYS AS (ST_SetSRID(ST_MakePoint(destination_lng, destination_lat), 4326)) STORED,
+    destination_geom extensions.geometry(Point, 4326) GENERATED ALWAYS AS (extensions.ST_SetSRID(extensions.ST_MakePoint(destination_lng, destination_lat), 4326)) STORED,
     departure_time TIMESTAMPTZ NOT NULL,
     available_seats INTEGER NOT NULL CHECK (available_seats >= 0),
     total_seats INTEGER NOT NULL DEFAULT 3 CHECK (total_seats >= 1),
@@ -51,7 +53,7 @@ CREATE TABLE IF NOT EXISTS public.rides (
 
 -- 3. RIDE REQUESTS
 CREATE TABLE IF NOT EXISTS public.ride_requests (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ride_id UUID NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
     passenger_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     seats_requested INTEGER NOT NULL DEFAULT 1 CHECK (seats_requested >= 1),
@@ -61,14 +63,13 @@ CREATE TABLE IF NOT EXISTS public.ride_requests (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Ensure a passenger cannot have multiple active pending requests for the same ride
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_pending_ride_request 
 ON public.ride_requests (ride_id, passenger_id) 
 WHERE status = 'pending';
 
 -- 4. MATCHES
 CREATE TABLE IF NOT EXISTS public.matches (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ride_id UUID NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
     driver_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     passenger_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -80,7 +81,7 @@ CREATE TABLE IF NOT EXISTS public.matches (
 
 -- 5. MESSAGES
 CREATE TABLE IF NOT EXISTS public.messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     match_id UUID NOT NULL REFERENCES public.matches(id) ON DELETE CASCADE,
     sender_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     message TEXT NOT NULL,
@@ -90,7 +91,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
 
 -- 6. RATINGS
 CREATE TABLE IF NOT EXISTS public.ratings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ride_id UUID NOT NULL REFERENCES public.rides(id) ON DELETE CASCADE,
     from_user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     to_user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -103,7 +104,7 @@ CREATE TABLE IF NOT EXISTS public.ratings (
 
 -- 7. REPORTS
 CREATE TABLE IF NOT EXISTS public.reports (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     reporter_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     reported_user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     ride_id UUID REFERENCES public.rides(id) ON DELETE SET NULL,
@@ -115,7 +116,7 @@ CREATE TABLE IF NOT EXISTS public.reports (
 
 -- 8. BLOCKED USERS
 CREATE TABLE IF NOT EXISTS public.blocked_users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     blocker_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     blocked_user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -125,7 +126,7 @@ CREATE TABLE IF NOT EXISTS public.blocked_users (
 
 -- 9. NOTIFICATIONS
 CREATE TABLE IF NOT EXISTS public.notifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     type TEXT NOT NULL,
     title TEXT NOT NULL,
@@ -137,7 +138,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 
 -- 10. DEVICE TOKENS
 CREATE TABLE IF NOT EXISTS public.device_tokens (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     token TEXT NOT NULL,
     platform TEXT NOT NULL,
@@ -146,7 +147,7 @@ CREATE TABLE IF NOT EXISTS public.device_tokens (
     CONSTRAINT unique_user_token UNIQUE (user_id, token)
 );
 
--- SPATIAL & PERFORMANCE INDEXES
+-- INDEXES
 CREATE INDEX IF NOT EXISTS idx_rides_pickup_geom ON public.rides USING GIST (pickup_geom);
 CREATE INDEX IF NOT EXISTS idx_rides_dest_geom ON public.rides USING GIST (destination_geom);
 CREATE INDEX IF NOT EXISTS idx_rides_creator ON public.rides (creator_id);
@@ -161,7 +162,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_match ON public.messages (match_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON public.notifications (user_id, read);
 CREATE INDEX IF NOT EXISTS idx_blocked_users_lookup ON public.blocked_users (blocker_id, blocked_user_id);
 
--- TRIGGER FOR UPDATED_AT
+-- TRIGGER FUNCTIONS
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -170,12 +171,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER update_profiles_modtime BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-CREATE OR REPLACE TRIGGER update_rides_modtime BEFORE UPDATE ON public.rides FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-CREATE OR REPLACE TRIGGER update_ride_requests_modtime BEFORE UPDATE ON public.ride_requests FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
-CREATE OR REPLACE TRIGGER update_device_tokens_modtime BEFORE UPDATE ON public.device_tokens FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+DROP TRIGGER IF EXISTS update_profiles_modtime ON public.profiles;
+CREATE TRIGGER update_profiles_modtime BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
--- TRIGGER FOR AUTO-CREATING PROFILE ON AUTH SIGNUP
+DROP TRIGGER IF EXISTS update_rides_modtime ON public.rides;
+CREATE TRIGGER update_rides_modtime BEFORE UPDATE ON public.rides FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS update_ride_requests_modtime ON public.ride_requests;
+CREATE TRIGGER update_ride_requests_modtime BEFORE UPDATE ON public.ride_requests FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS update_device_tokens_modtime ON public.device_tokens;
+CREATE TRIGGER update_device_tokens_modtime BEFORE UPDATE ON public.device_tokens FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- AUTO-CREATE PROFILE ON AUTH SIGNUP
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -186,16 +194,21 @@ BEGIN
         COALESCE(NEW.raw_user_meta_data->>'username', SPLIT_PART(NEW.email, '@', 1)),
         COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'),
         COALESCE(NEW.raw_user_meta_data->>'phone', NEW.phone)
-    );
+    )
+    ON CONFLICT (id) DO UPDATE SET
+        full_name = EXCLUDED.full_name,
+        username = COALESCE(public.profiles.username, EXCLUDED.username),
+        updated_at = NOW();
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE TRIGGER on_auth_user_created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- TRIGGER FOR RECALCULATING PROFILE RATING AFTER A RATING IS INSERTED
+-- AUTO-RECALCULATE RATING TRIGGER
 CREATE OR REPLACE FUNCTION public.handle_new_rating()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -216,11 +229,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE TRIGGER on_rating_added
+DROP TRIGGER IF EXISTS on_rating_added ON public.ratings;
+CREATE TRIGGER on_rating_added
     AFTER INSERT ON public.ratings
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_rating();
 
--- POSTGIS MATCHING ALGORITHM RPC: find_matching_rides
+-- POSTGIS MATCHING ALGORITHM RPC
 CREATE OR REPLACE FUNCTION public.find_matching_rides(
     p_pickup_lat DOUBLE PRECISION,
     p_pickup_lng DOUBLE PRECISION,
@@ -285,26 +299,18 @@ BEGIN
             r.notes AS r_notes,
             r.vehicle_info AS r_vehicle_info,
             r.status AS r_status,
-            -- Spherical distance from passenger pickup to driver pickup
-            ST_DistanceSphere(r.pickup_geom, ST_SetSRID(ST_MakePoint(p_pickup_lng, p_pickup_lat), 4326)) AS p_dist,
-            -- Spherical distance from passenger destination to driver destination
-            ST_DistanceSphere(r.destination_geom, ST_SetSRID(ST_MakePoint(p_dest_lng, p_dest_lat), 4326)) AS d_dist,
-            -- Absolute departure time difference in minutes
+            extensions.ST_DistanceSphere(r.pickup_geom, extensions.ST_SetSRID(extensions.ST_MakePoint(p_pickup_lng, p_pickup_lat), 4326)) AS p_dist,
+            extensions.ST_DistanceSphere(r.destination_geom, extensions.ST_SetSRID(extensions.ST_MakePoint(p_dest_lng, p_dest_lat), 4326)) AS d_dist,
             ABS(EXTRACT(EPOCH FROM (r.departure_time - p_departure_time)) / 60.0) AS t_diff,
-            -- Vector direction comparison (Bearing cosine similarity)
-            -- Vector 1: Driver route (pickup -> dest)
             (r.destination_lng - r.pickup_lng) AS v1_x,
             (r.destination_lat - r.pickup_lat) AS v1_y,
-            -- Vector 2: Passenger route (p_pickup -> p_dest)
             (p_dest_lng - p_pickup_lng) AS v2_x,
             (p_dest_lat - p_pickup_lat) AS v2_y
         FROM public.rides r
         JOIN public.profiles p ON r.creator_id = p.id
         WHERE r.status = 'active'
           AND r.available_seats >= p_seats_needed
-          -- Exclude own rides
           AND (p_user_id IS NULL OR r.creator_id <> p_user_id)
-          -- Exclude blocked users both ways
           AND (p_user_id IS NULL OR NOT EXISTS (
               SELECT 1 FROM public.blocked_users b 
               WHERE (b.blocker_id = p_user_id AND b.blocked_user_id = r.creator_id)
@@ -314,7 +320,6 @@ BEGIN
     scored_rides AS (
         SELECT 
             *,
-            -- Compute Vector dot product and magnitudes
             CASE 
                 WHEN (SQRT(v1_x*v1_x + v1_y*v1_y) * SQRT(v2_x*v2_x + v2_y*v2_y)) > 0
                 THEN ((v1_x * v2_x + v1_y * v2_y) / (SQRT(v1_x*v1_x + v1_y*v1_y) * SQRT(v2_x*v2_x + v2_y*v2_y)))
@@ -350,8 +355,6 @@ BEGIN
         p_dist,
         d_dist,
         t_diff,
-        -- Weighted compatibility score (0 to 100)
-        -- Pickup (30%) + Destination (30%) + Time (20%) + Direction Similarity (20%)
         ROUND(
             (
                 (GREATEST(0.0, 1.0 - (p_dist / (p_pickup_radius_km * 1000.0))) * 30.0) +
@@ -362,7 +365,7 @@ BEGIN
             0
         ) AS compatibility_score
     FROM scored_rides
-    WHERE cos_similarity >= 0.0 -- Filter out trips going in opposing directions
+    WHERE cos_similarity >= 0.0
     ORDER BY compatibility_score DESC, p_dist ASC;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -380,57 +383,57 @@ ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.device_tokens ENABLE ROW LEVEL SECURITY;
 
 -- 1. Profiles Policies
-CREATE POLICY "Public profiles are viewable by everyone" 
-ON public.profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
+CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
 
-CREATE POLICY "Users can update their own profile" 
-ON public.profiles FOR UPDATE USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
-CREATE POLICY "Users can insert their own profile" 
-ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
+CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
 -- 2. Rides Policies
-CREATE POLICY "Active and completed rides are viewable by authenticated users" 
-ON public.rides FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Active and completed rides are viewable by authenticated users" ON public.rides;
+CREATE POLICY "Active and completed rides are viewable by authenticated users" ON public.rides FOR SELECT USING (true);
 
-CREATE POLICY "Users can create rides" 
-ON public.rides FOR INSERT WITH CHECK (auth.uid() = creator_id);
+DROP POLICY IF EXISTS "Users can create rides" ON public.rides;
+CREATE POLICY "Users can create rides" ON public.rides FOR INSERT WITH CHECK (auth.uid() = creator_id);
 
-CREATE POLICY "Ride creators can update their own rides" 
-ON public.rides FOR UPDATE USING (auth.uid() = creator_id);
+DROP POLICY IF EXISTS "Ride creators can update their own rides" ON public.rides;
+CREATE POLICY "Ride creators can update their own rides" ON public.rides FOR UPDATE USING (auth.uid() = creator_id);
 
-CREATE POLICY "Ride creators can delete their own rides" 
-ON public.rides FOR DELETE USING (auth.uid() = creator_id);
+DROP POLICY IF EXISTS "Ride creators can delete their own rides" ON public.rides;
+CREATE POLICY "Ride creators can delete their own rides" ON public.rides FOR DELETE USING (auth.uid() = creator_id);
 
 -- 3. Ride Requests Policies
-CREATE POLICY "Users can view requests they sent or received for their rides" 
-ON public.ride_requests FOR SELECT USING (
+DROP POLICY IF EXISTS "Users can view requests they sent or received for their rides" ON public.ride_requests;
+CREATE POLICY "Users can view requests they sent or received for their rides" ON public.ride_requests FOR SELECT USING (
     auth.uid() = passenger_id OR 
     EXISTS (SELECT 1 FROM public.rides WHERE rides.id = ride_requests.ride_id AND rides.creator_id = auth.uid())
 );
 
-CREATE POLICY "Passengers can create requests" 
-ON public.ride_requests FOR INSERT WITH CHECK (auth.uid() = passenger_id);
+DROP POLICY IF EXISTS "Passengers can create requests" ON public.ride_requests;
+CREATE POLICY "Passengers can create requests" ON public.ride_requests FOR INSERT WITH CHECK (auth.uid() = passenger_id);
 
-CREATE POLICY "Passengers and Ride Creators can update requests" 
-ON public.ride_requests FOR UPDATE USING (
+DROP POLICY IF EXISTS "Passengers and Ride Creators can update requests" ON public.ride_requests;
+CREATE POLICY "Passengers and Ride Creators can update requests" ON public.ride_requests FOR UPDATE USING (
     auth.uid() = passenger_id OR 
     EXISTS (SELECT 1 FROM public.rides WHERE rides.id = ride_requests.ride_id AND rides.creator_id = auth.uid())
 );
 
 -- 4. Matches Policies
-CREATE POLICY "Matched users can view their matches" 
-ON public.matches FOR SELECT USING (auth.uid() = driver_id OR auth.uid() = passenger_id);
+DROP POLICY IF EXISTS "Matched users can view their matches" ON public.matches;
+CREATE POLICY "Matched users can view their matches" ON public.matches FOR SELECT USING (auth.uid() = driver_id OR auth.uid() = passenger_id);
 
-CREATE POLICY "Drivers can insert matches" 
-ON public.matches FOR INSERT WITH CHECK (auth.uid() = driver_id);
+DROP POLICY IF EXISTS "Drivers can insert matches" ON public.matches;
+CREATE POLICY "Drivers can insert matches" ON public.matches FOR INSERT WITH CHECK (auth.uid() = driver_id);
 
-CREATE POLICY "Participants can update matches" 
-ON public.matches FOR UPDATE USING (auth.uid() = driver_id OR auth.uid() = passenger_id);
+DROP POLICY IF EXISTS "Participants can update matches" ON public.matches;
+CREATE POLICY "Participants can update matches" ON public.matches FOR UPDATE USING (auth.uid() = driver_id OR auth.uid() = passenger_id);
 
 -- 5. Messages Policies
-CREATE POLICY "Participants of a match can view messages" 
-ON public.messages FOR SELECT USING (
+DROP POLICY IF EXISTS "Participants of a match can view messages" ON public.messages;
+CREATE POLICY "Participants of a match can view messages" ON public.messages FOR SELECT USING (
     EXISTS (
         SELECT 1 FROM public.matches 
         WHERE matches.id = messages.match_id 
@@ -438,8 +441,8 @@ ON public.messages FOR SELECT USING (
     )
 );
 
-CREATE POLICY "Participants of a match can send messages" 
-ON public.messages FOR INSERT WITH CHECK (
+DROP POLICY IF EXISTS "Participants of a match can send messages" ON public.messages;
+CREATE POLICY "Participants of a match can send messages" ON public.messages FOR INSERT WITH CHECK (
     auth.uid() = sender_id AND
     EXISTS (
         SELECT 1 FROM public.matches 
@@ -449,11 +452,11 @@ ON public.messages FOR INSERT WITH CHECK (
 );
 
 -- 6. Ratings Policies
-CREATE POLICY "Ratings are viewable by everyone" 
-ON public.ratings FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Ratings are viewable by everyone" ON public.ratings;
+CREATE POLICY "Ratings are viewable by everyone" ON public.ratings FOR SELECT USING (true);
 
-CREATE POLICY "Users can create ratings for trips they participated in" 
-ON public.ratings FOR INSERT WITH CHECK (
+DROP POLICY IF EXISTS "Users can create ratings for trips they participated in" ON public.ratings;
+CREATE POLICY "Users can create ratings for trips they participated in" ON public.ratings FOR INSERT WITH CHECK (
     auth.uid() = from_user_id AND
     EXISTS (
         SELECT 1 FROM public.matches 
@@ -463,20 +466,34 @@ ON public.ratings FOR INSERT WITH CHECK (
 );
 
 -- 7. Reports Policies
-CREATE POLICY "Users can create reports" 
-ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+DROP POLICY IF EXISTS "Users can create reports" ON public.reports;
+CREATE POLICY "Users can create reports" ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
 
-CREATE POLICY "Reporters can view their submitted reports" 
-ON public.reports FOR SELECT USING (auth.uid() = reporter_id);
+DROP POLICY IF EXISTS "Reporters can view their submitted reports" ON public.reports;
+CREATE POLICY "Reporters can view their submitted reports" ON public.reports FOR SELECT USING (auth.uid() = reporter_id);
 
 -- 8. Blocked Users Policies
-CREATE POLICY "Users can view and manage their blocked users" 
-ON public.blocked_users FOR ALL USING (auth.uid() = blocker_id);
+DROP POLICY IF EXISTS "Users can view and manage their blocked users" ON public.blocked_users;
+CREATE POLICY "Users can view and manage their blocked users" ON public.blocked_users FOR ALL USING (auth.uid() = blocker_id);
 
 -- 9. Notifications Policies
-CREATE POLICY "Users can view and update their own notifications" 
-ON public.notifications FOR ALL USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can view and update their own notifications" ON public.notifications;
+CREATE POLICY "Users can view and update their own notifications" ON public.notifications FOR ALL USING (auth.uid() = user_id);
 
 -- 10. Device Tokens Policies
-CREATE POLICY "Users can manage their device tokens" 
-ON public.device_tokens FOR ALL USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can manage their device tokens" ON public.device_tokens;
+CREATE POLICY "Users can manage their device tokens" ON public.device_tokens FOR ALL USING (auth.uid() = user_id);
+
+-- 11. AUTO-POPULATE PROFILES FOR EXISTING USERS
+INSERT INTO public.profiles (id, full_name, username, avatar_url, phone)
+SELECT 
+    id,
+    COALESCE(raw_user_meta_data->>'full_name', email),
+    COALESCE(raw_user_meta_data->>'username', SPLIT_PART(email, '@', 1)),
+    COALESCE(raw_user_meta_data->>'avatar_url', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'),
+    COALESCE(raw_user_meta_data->>'phone', phone)
+FROM auth.users
+ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    username = COALESCE(public.profiles.username, EXCLUDED.username),
+    updated_at = NOW();

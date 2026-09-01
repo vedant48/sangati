@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 
 export const DownloadCTA = () => {
   return (
@@ -9,41 +10,66 @@ export const DownloadCTA = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
         <div className="max-w-3xl mx-auto space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold uppercase tracking-wider">
-            <span>📱 Available on Android</span>
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/20 backdrop-blur-md text-xs font-bold uppercase tracking-wider">
+            <span>📱 Android APK Direct Download</span>
           </div>
 
           <h2 className="text-3xl sm:text-5xl font-black tracking-tight leading-tight">
-            Start Sharing Rides and Saving on Daily Commutes Today
+            Download Sangati & Start Sharing Rides Today
           </h2>
 
           <p className="text-base sm:text-lg text-blue-100 leading-relaxed max-w-2xl mx-auto">
-            Download the Companion Ride Android APK or start the Expo release on your device to discover verified travel companions on your daily corridor.
+            Get the official Sangati Companion Ride Android APK directly on your phone. Connect with verified commuters on your daily route and start splitting fuel costs.
           </p>
 
           {/* Download Action Box */}
-          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <div className="bg-white text-deepGraphite rounded-2xl p-4 shadow-xl flex items-center gap-4 text-left w-full sm:w-auto">
-              <div className="w-12 h-12 rounded-xl bg-aiBlue-light flex items-center justify-center text-2xl">
-                🤖
+          <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-5">
+            {/* Direct APK Download Button */}
+            <a
+              href="/SangatiCompanionRide.apk"
+              download="SangatiCompanionRide.apk"
+              className="group bg-white text-deepGraphite hover:bg-slate-50 transition-all transform hover:-translate-y-0.5 rounded-2xl p-5 shadow-2xl flex items-center gap-4 text-left w-full sm:w-auto border-2 border-white/80 cursor-pointer"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-aiBlue text-white flex items-center justify-center text-3xl shadow-md group-hover:scale-105 transition-transform">
+                ⬇️
               </div>
               <div>
-                <p className="text-xs font-bold text-slateGrey uppercase tracking-wider">Android Build</p>
-                <p className="text-base font-extrabold text-deepGraphite">CompanionRide.apk</p>
-                <p className="text-[11px] text-green-600 font-semibold">Production Ready v1.0.0</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slateGrey uppercase tracking-wider">Direct Download</span>
+                  <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">Verified APK</span>
+                </div>
+                <p className="text-lg font-extrabold text-deepGraphite mt-0.5">Download Android APK</p>
+                <p className="text-xs text-slateGrey font-medium">v1.0.0 • Production Build • Fast & Safe</p>
               </div>
-            </div>
+            </a>
 
-            <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-2xl p-4 flex items-center gap-4 text-left w-full sm:w-auto">
-              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
-                ⚡
+            {/* View Install Guide */}
+            <Link
+              href="/download"
+              className="bg-white/15 hover:bg-white/20 transition-all backdrop-blur-md border border-white/30 text-white rounded-2xl p-5 flex items-center gap-4 text-left w-full sm:w-auto"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center text-3xl">
+                📖
               </div>
               <div>
-                <p className="text-xs font-bold text-blue-200 uppercase tracking-wider">Expo Go Quickstart</p>
-                <p className="text-base font-extrabold text-white">npx expo start</p>
-                <p className="text-[11px] text-blue-200">Scan QR on Android / iOS</p>
+                <p className="text-xs font-bold text-blue-200 uppercase tracking-wider">Installation Guide</p>
+                <p className="text-lg font-extrabold text-white mt-0.5">How to Install APK</p>
+                <p className="text-xs text-blue-200 font-medium">Step-by-step setup instructions →</p>
               </div>
-            </div>
+            </Link>
+          </div>
+
+          {/* Guarantee Badges */}
+          <div className="pt-8 flex flex-wrap items-center justify-center gap-6 text-xs text-blue-100 font-medium">
+            <span className="flex items-center gap-1.5">
+              <span>🛡️</span> 100% Virus & Malware Free
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span>⚡</span> Direct Fast CDN Download
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span>🔒</span> Supabase Encrypted Connection
+            </span>
           </div>
         </div>
       </div>

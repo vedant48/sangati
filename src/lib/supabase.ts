@@ -9,6 +9,7 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOi
 export const isSupabaseConfigured = Boolean(
   process.env.EXPO_PUBLIC_SUPABASE_URL && 
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY &&
+  !process.env.EXPO_PUBLIC_SUPABASE_URL.includes('demo-companion-ride') &&
   !process.env.EXPO_PUBLIC_SUPABASE_URL.includes('xyzcompany')
 );
 

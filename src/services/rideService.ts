@@ -1,13 +1,7 @@
-// Ride Management Service
+// Pure Supabase Ride Management Service
 
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { Ride, RideRequest, Match, RideType } from '../types';
-import { saveMockRide, getMockRides } from './mockRides';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DEFAULT_DEMO_USER } from './authService';
-
-const MOCK_REQUESTS_KEY = '@companion_ride_mock_requests';
-const MOCK_MATCHES_KEY = '@companion_ride_mock_matches';
 
 export async function createRide(params: {
   creatorId: string;
@@ -25,72 +19,65 @@ export async function createRide(params: {
   notes?: string;
   vehicleInfo?: string;
 }): Promise<Ride> {
-  const newRide: Ride = {
-    id: `ride_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    creator_id: params.creatorId,
-    pickup_name: params.pickupName,
-    pickup_lat: params.pickupLat,
-    pickup_lng: params.pickupLng,
-    destination_name: params.destinationName,
-    destination_lat: params.destinationLat,
-    destination_lng: params.destinationLng,
-    departure_time: params.departureTime.toISOString(),
-    available_seats: params.availableSeats,
-    total_seats: params.totalSeats,
-    ride_type: params.rideType,
-    contribution_amount: params.contributionAmount,
-    notes: params.notes,
-    vehicle_info: params.vehicleInfo,
-    status: 'active',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
+  const { data, error } = await supabase
+    .from('rides')
+    .insert({
+      creator_id: params.creatorId,
+      pickup_name: params.pickupName,
+      pickup_lat: params.pickupLat,
+      pickup_lng: params.pickupLng,
+      destination_name: params.destinationName,
+      destination_lat: params.destinationLat,
+      destination_lng: params.destinationLng,
+      departure_time: params.departureTime.toISOString(),
+      available_seats: params.availableSeats,
+      total_seats: params.totalSeats,
+      ride_type: params.rideType,
+      contribution_amount: params.contributionAmount,
+      notes: params.notes,
+      vehicle_info: params.vehicleInfo,
+      status: 'active',
+    })
+    .select('*, creator:profiles(*)')
+    .single();
 
-  if (isSupabaseConfigured) {
-    const { data, error } = await supabase
-      .from('rides')
-      .insert({
-        creator_id: params.creatorId,
-        pickup_name: params.pickupName,
-        pickup_lat: params.pickupLat,
-        pickup_lng: params.pickupLng,
-        destination_name: params.destinationName,
-        destination_lat: params.destinationLat,
-        destination_lng: params.destinationLng,
-        departure_time: params.departureTime.toISOString(),
-        available_seats: params.availableSeats,
-        total_seats: params.totalSeats,
-        ride_type: params.rideType,
-        contribution_amount: params.contributionAmount,
-        notes: params.notes,
-        vehicle_info: params.vehicleInfo,
-        status: 'active',
-      })
-      .select('*, creator:profiles(*)')
-      .single();
-
-    if (error) throw error;
-    return data as Ride;
+  if (error) {
+    throw new Error(error.message);
   }
 
-  await saveMockRide(newRide);
-  return newRide;
+  return data as Ride;
+}
+
+export async function getActiveRides(limit: number = 10): Promise<Ride[]> {
+  const { data, error } = await supabase
+    .from('rides')
+    .select('*, creator:profiles(*)')
+    .eq('status', 'active')
+    .gte('departure_time', new Date().toISOString())
+    .order('departure_time', { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    console.warn('Error fetching active rides:', error.message);
+    return [];
+  }
+
+  return (data || []) as Ride[];
 }
 
 export async function getRideById(rideId: string): Promise<Ride | null> {
-  if (isSupabaseConfigured) {
-    const { data, error } = await supabase
-      .from('rides')
-      .select('*, creator:profiles(*)')
-      .eq('id', rideId)
-      .single();
+  const { data, error } = await supabase
+    .from('rides')
+    .select('*, creator:profiles(*)')
+    .eq('id', rideId)
+    .maybeSingle();
 
-    if (error) return null;
-    return data as Ride;
+  if (error) {
+    console.warn('Error fetching ride by ID:', error.message);
+    return null;
   }
 
-  const rides = await getMockRides();
-  return rides.find((r) => r.id === rideId) || null;
+  return data as Ride | null;
 }
 
 export async function requestToJoinRide(params: {
@@ -99,226 +86,152 @@ export async function requestToJoinRide(params: {
   seatsRequested: number;
   message?: string;
 }): Promise<RideRequest> {
-  if (isSupabaseConfigured) {
-    const { data, error } = await supabase
-      .from('ride_requests')
-      .insert({
-        ride_id: params.rideId,
-        passenger_id: params.passengerId,
-        seats_requested: params.seatsRequested,
-        message: params.message,
-        status: 'pending',
-      })
-      .select()
-      .single();
+  // Check if existing pending request exists
+  const { data: existing } = await supabase
+    .from('ride_requests')
+    .select('id')
+    .eq('ride_id', params.rideId)
+    .eq('passenger_id', params.passengerId)
+    .eq('status', 'pending')
+    .maybeSingle();
 
-    if (error) throw error;
-    return data as RideRequest;
+  if (existing) {
+    throw new Error('You already have a pending request for this ride.');
   }
 
-  // Local Mock Flow
-  const cachedRequests = await getMockRequests();
-  const existingPending = cachedRequests.find(
-    (r) => r.ride_id === params.rideId && r.passenger_id === params.passengerId && r.status === 'pending'
-  );
-  if (existingPending) {
-    throw new Error('You already have a pending request for this journey.');
+  const { data, error } = await supabase
+    .from('ride_requests')
+    .insert({
+      ride_id: params.rideId,
+      passenger_id: params.passengerId,
+      seats_requested: params.seatsRequested,
+      message: params.message,
+      status: 'pending',
+    })
+    .select('*, passenger:profiles(*), ride:rides(*)')
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
   }
 
-  const newRequest: RideRequest = {
-    id: `req_${Date.now()}`,
-    ride_id: params.rideId,
-    passenger_id: params.passengerId,
-    passenger: DEFAULT_DEMO_USER,
-    seats_requested: params.seatsRequested,
-    message: params.message,
-    status: 'pending',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  await AsyncStorage.setItem(
-    MOCK_REQUESTS_KEY,
-    JSON.stringify([newRequest, ...cachedRequests])
-  );
-  return newRequest;
+  return data as RideRequest;
 }
 
 export async function getDriverIncomingRequests(driverId: string): Promise<RideRequest[]> {
-  if (isSupabaseConfigured) {
-    const { data, error } = await supabase
-      .from('ride_requests')
-      .select('*, passenger:profiles(*), ride:rides(*)')
-      .eq('rides.creator_id', driverId)
-      .eq('status', 'pending');
+  const { data: driverRides, error: ridesErr } = await supabase
+    .from('rides')
+    .select('id')
+    .eq('creator_id', driverId);
 
-    if (error) return [];
-    return data as RideRequest[];
+  if (ridesErr || !driverRides || driverRides.length === 0) {
+    return [];
   }
 
-  const allRequests = await getMockRequests();
-  return allRequests.filter((r) => r.status === 'pending');
+  const rideIds = driverRides.map((r) => r.id);
+
+  const { data, error } = await supabase
+    .from('ride_requests')
+    .select('*, passenger:profiles(*), ride:rides(*)')
+    .in('ride_id', rideIds)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.warn('Error fetching driver requests:', error.message);
+    return [];
+  }
+
+  return (data || []) as RideRequest[];
 }
 
 export async function acceptRideRequest(requestId: string, driverId: string): Promise<Match> {
-  if (isSupabaseConfigured) {
-    // 1. Get request
-    const { data: request, error: reqErr } = await supabase
-      .from('ride_requests')
-      .select('*, ride:rides(*)')
-      .eq('id', requestId)
-      .single();
-    if (reqErr || !request) throw new Error('Request not found');
+  // 1. Get request
+  const { data: request, error: reqErr } = await supabase
+    .from('ride_requests')
+    .select('*, ride:rides(*)')
+    .eq('id', requestId)
+    .single();
 
-    const ride = request.ride;
-    if (ride.available_seats < request.seats_requested) {
-      throw new Error('Not enough available seats left on this ride.');
-    }
-
-    // 2. Update request status
-    await supabase
-      .from('ride_requests')
-      .update({ status: 'accepted', updated_at: new Date().toISOString() })
-      .eq('id', requestId);
-
-    // 3. Decrement seats
-    const newSeats = ride.available_seats - request.seats_requested;
-    await supabase
-      .from('rides')
-      .update({
-        available_seats: newSeats,
-        status: newSeats === 0 ? 'full' : ride.status,
-      })
-      .eq('id', ride.id);
-
-    // 4. Create match
-    const { data: match, error: matchErr } = await supabase
-      .from('matches')
-      .insert({
-        ride_id: ride.id,
-        driver_id: driverId,
-        passenger_id: request.passenger_id,
-        request_id: requestId,
-        status: 'active',
-      })
-      .select('*, ride:rides(*), driver:profiles!driver_id(*), passenger:profiles!passenger_id(*)')
-      .single();
-
-    if (matchErr) throw matchErr;
-    return match as Match;
+  if (reqErr || !request) {
+    throw new Error('Request not found.');
   }
 
-  // Local simulation
-  const requests = await getMockRequests();
-  const reqIndex = requests.findIndex((r) => r.id === requestId);
-  if (reqIndex === -1) throw new Error('Request not found');
+  const ride = request.ride;
+  if (ride.available_seats < request.seats_requested) {
+    throw new Error('Not enough available seats left on this ride.');
+  }
 
-  const req = requests[reqIndex];
-  req.status = 'accepted';
-  await AsyncStorage.setItem(MOCK_REQUESTS_KEY, JSON.stringify(requests));
+  // 2. Update request status to accepted
+  await supabase
+    .from('ride_requests')
+    .update({ status: 'accepted', updated_at: new Date().toISOString() })
+    .eq('id', requestId);
 
-  const newMatch: Match = {
-    id: `match_${Date.now()}`,
-    ride_id: req.ride_id,
-    driver_id: driverId,
-    passenger_id: req.passenger_id,
-    passenger: req.passenger || DEFAULT_DEMO_USER,
-    status: 'active',
-    matched_at: new Date().toISOString(),
-  };
+  // 3. Decrement available seats
+  const newSeats = Math.max(0, ride.available_seats - request.seats_requested);
+  await supabase
+    .from('rides')
+    .update({
+      available_seats: newSeats,
+      status: newSeats === 0 ? 'full' : ride.status,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', ride.id);
 
-  const matches = await getMockMatches();
-  await AsyncStorage.setItem(MOCK_MATCHES_KEY, JSON.stringify([newMatch, ...matches]));
+  // 4. Create match record
+  const { data: match, error: matchErr } = await supabase
+    .from('matches')
+    .insert({
+      ride_id: ride.id,
+      driver_id: driverId,
+      passenger_id: request.passenger_id,
+      request_id: requestId,
+      status: 'active',
+    })
+    .select('*, ride:rides(*), driver:profiles!driver_id(*), passenger:profiles!passenger_id(*)')
+    .single();
 
-  return newMatch;
+  if (matchErr) {
+    throw new Error(matchErr.message);
+  }
+
+  return match as Match;
 }
 
 export async function rejectRideRequest(requestId: string): Promise<void> {
-  if (isSupabaseConfigured) {
-    await supabase
-      .from('ride_requests')
-      .update({ status: 'rejected', updated_at: new Date().toISOString() })
-      .eq('id', requestId);
-    return;
-  }
+  const { error } = await supabase
+    .from('ride_requests')
+    .update({ status: 'rejected', updated_at: new Date().toISOString() })
+    .eq('id', requestId);
 
-  const requests = await getMockRequests();
-  const target = requests.find((r) => r.id === requestId);
-  if (target) {
-    target.status = 'rejected';
-    await AsyncStorage.setItem(MOCK_REQUESTS_KEY, JSON.stringify(requests));
+  if (error) {
+    throw new Error(error.message);
   }
 }
 
 export async function getUserMatches(userId: string): Promise<Match[]> {
-  if (isSupabaseConfigured) {
-    const { data, error } = await supabase
-      .from('matches')
-      .select('*, ride:rides(*), driver:profiles!driver_id(*), passenger:profiles!passenger_id(*)')
-      .or(`driver_id.eq.${userId},passenger_id.eq.${userId}`)
-      .order('matched_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('matches')
+    .select('*, ride:rides(*), driver:profiles!driver_id(*), passenger:profiles!passenger_id(*)')
+    .or(`driver_id.eq.${userId},passenger_id.eq.${userId}`)
+    .order('matched_at', { ascending: false });
 
-    if (error) return [];
-    return data as Match[];
+  if (error) {
+    console.warn('Error fetching user matches:', error.message);
+    return [];
   }
 
-  return await getMockMatches();
+  return (data || []) as Match[];
 }
 
 export async function updateRideStatus(rideId: string, status: Ride['status']): Promise<void> {
-  if (isSupabaseConfigured) {
-    await supabase.from('rides').update({ status }).eq('id', rideId);
-    return;
-  }
+  const { error } = await supabase
+    .from('rides')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', rideId);
 
-  const rides = await getMockRides();
-  const target = rides.find((r) => r.id === rideId);
-  if (target) {
-    target.status = status;
-    await AsyncStorage.setItem('@companion_ride_local_rides', JSON.stringify(rides));
+  if (error) {
+    throw new Error(error.message);
   }
-}
-
-async function getMockRequests(): Promise<RideRequest[]> {
-  try {
-    const json = await AsyncStorage.getItem(MOCK_REQUESTS_KEY);
-    return json ? JSON.parse(json) : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-async function getMockMatches(): Promise<Match[]> {
-  try {
-    const json = await AsyncStorage.getItem(MOCK_MATCHES_KEY);
-    if (json) return JSON.parse(json);
-  } catch (e) {
-    // fallback
-  }
-
-  return [
-    {
-      id: 'bbbb1111-1111-1111-1111-111111111111',
-      ride_id: 'aaaa2222-2222-2222-2222-222222222222',
-      driver_id: '22222222-2222-2222-2222-222222222222',
-      driver: {
-        id: '22222222-2222-2222-2222-222222222222',
-        full_name: 'Priya Sharma',
-        username: 'priyas',
-        avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200',
-        phone: '+91 9812345678',
-        rating: 4.85,
-        total_ratings: 18,
-        total_trips: 29,
-        is_phone_verified: true,
-        is_identity_verified: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      passenger_id: '11111111-1111-1111-1111-111111111111',
-      passenger: DEFAULT_DEMO_USER,
-      status: 'active',
-      matched_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    },
-  ];
 }

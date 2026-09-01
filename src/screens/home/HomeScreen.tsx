@@ -18,8 +18,7 @@ import { RideCard } from '../../components/ride/RideCard';
 import { SOSButton } from '../../components/safety/SOSButton';
 import { useAuth } from '../../context/AuthContext';
 import { useRideContext } from '../../context/RideContext';
-import { getMockRides } from '../../services/mockRides';
-import { getUserMatches } from '../../services/rideService';
+import { getActiveRides, getUserMatches } from '../../services/rideService';
 import { Ride, Match } from '../../types';
 import { formatDateOnly, formatTimeOnly } from '../../utils/formatters';
 
@@ -32,8 +31,8 @@ export const HomeScreen = ({ navigation }: any) => {
 
   const loadHomeData = async () => {
     try {
-      const allRides = await getMockRides();
-      setNearbyRides(allRides.slice(0, 3));
+      const allRides = await getActiveRides(5);
+      setNearbyRides(allRides);
 
       if (user) {
         const matches = await getUserMatches(user.id);
@@ -181,20 +180,36 @@ export const HomeScreen = ({ navigation }: any) => {
         {/* Nearby Ride Suggestions */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Popular Corridor Rides</Text>
+            <Text style={styles.sectionTitle}>Active Corridor Rides</Text>
             <TouchableOpacity onPress={() => navigation.navigate('FindRide')}>
-              <Text style={styles.sectionLink}>View All</Text>
+              <Text style={styles.sectionLink}>Search</Text>
             </TouchableOpacity>
           </View>
 
-          {nearbyRides.map((ride) => (
-            <RideCard
-              key={ride.id}
-              ride={ride}
-              onRequestPress={() => navigation.navigate('RequestToJoin', { ride })}
-              onCardPress={() => navigation.navigate('RideDetail', { ride })}
-            />
-          ))}
+          {nearbyRides.length > 0 ? (
+            nearbyRides.map((ride) => (
+              <RideCard
+                key={ride.id}
+                ride={ride}
+                onRequestPress={() => navigation.navigate('RequestToJoin', { ride })}
+                onCardPress={() => navigation.navigate('RideDetail', { ride })}
+              />
+            ))
+          ) : (
+            <Card style={styles.emptyRideCard}>
+              <Text style={styles.emptyRideIcon}>🚗</Text>
+              <Text style={styles.emptyRideTitle}>No Active Rides Yet</Text>
+              <Text style={styles.emptyRideSub}>
+                Be the first to publish a ride or search for upcoming travel companions!
+              </Text>
+              <Button
+                title="Offer a Ride"
+                onPress={() => navigation.navigate('OfferRide')}
+                size="sm"
+                style={{ marginTop: Spacing.sm }}
+              />
+            </Card>
+          )}
         </View>
 
         {/* Safety First Highlight */}
@@ -433,5 +448,29 @@ const styles = StyleSheet.create({
     ...Typography.captionMedium,
     color: Colors.teal,
     fontWeight: '700',
+  },
+  emptyRideCard: {
+    backgroundColor: Colors.surface,
+    padding: Spacing.lg,
+    alignItems: 'center',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  emptyRideIcon: {
+    fontSize: 32,
+    marginBottom: Spacing.xs,
+  },
+  emptyRideTitle: {
+    ...Typography.bodyMedium,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 4,
+  },
+  emptyRideSub: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
   },
 });
