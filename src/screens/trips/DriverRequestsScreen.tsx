@@ -88,6 +88,7 @@ export const DriverRequestsScreen = () => {
         renderItem={({ item }) => {
           const passenger = item.passenger || {
             full_name: 'Passenger',
+            avatar_url: undefined,
             rating: 4.9,
             total_trips: 14,
             is_phone_verified: true,

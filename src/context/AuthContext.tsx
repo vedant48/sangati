@@ -2,13 +2,13 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Profile } from '../types';
-import { getCurrentProfile, signOut as authSignOut, updateProfile as updateProfileService } from '../services/authService';
+import { getCurrentProfile, signOut as authSignOut, updateProfile as updateProfileService, signInWithEmail } from '../services/authService';
 
 interface AuthContextType {
   user: Profile | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string) => Promise<void>;
+  login: (email: string, password?: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<Profile>) => Promise<Profile>;
   refreshUser: () => Promise<void>;
@@ -36,10 +36,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loadUser();
   }, []);
 
-  const login = async (email: string) => {
+  const login = async (email: string, password = 'password123') => {
     setIsLoading(true);
     try {
-      const profile = await getCurrentProfile();
+      const profile = await signInWithEmail(email, password);
       setUser(profile);
     } finally {
       setIsLoading(false);

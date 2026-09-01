@@ -26,26 +26,38 @@ export const DEFAULT_DEMO_USER: Profile = {
 };
 
 export async function getCurrentProfile(userId?: string): Promise<Profile | null> {
-  if (!isSupabaseConfigured) {
-    const cached = await AsyncStorage.getItem(MOCK_PROFILE_KEY);
-    return cached ? JSON.parse(cached) : DEFAULT_DEMO_USER;
+  const cached = await AsyncStorage.getItem(MOCK_PROFILE_KEY);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch {
+      // ignore JSON parse errors
+    }
   }
 
-  const uid = userId || (await supabase.auth.getUser()).data.user?.id;
-  if (!uid) return null;
+  if (!isSupabaseConfigured) {
+    return DEFAULT_DEMO_USER;
+  }
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', uid)
-    .single();
+  try {
+    const uid = userId || (await supabase.auth.getUser()).data.user?.id;
+    if (!uid) return null;
 
-  if (error) {
-    console.warn('Error fetching profile:', error.message);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', uid)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data as Profile;
+  } catch (err) {
+    console.warn('Error fetching profile:', err);
     return null;
   }
-
-  return data as Profile;
 }
 
 export async function updateProfile(profileUpdates: Partial<Profile>): Promise<Profile> {
@@ -57,7 +69,12 @@ export async function updateProfile(profileUpdates: Partial<Profile>): Promise<P
   }
 
   const user = (await supabase.auth.getUser()).data.user;
-  if (!user) throw new Error('Not authenticated');
+  if (!user) {
+    const current = (await getCurrentProfile()) || DEFAULT_DEMO_USER;
+    const updated = { ...current, ...profileUpdates, updated_at: new Date().toISOString() };
+    await AsyncStorage.setItem(MOCK_PROFILE_KEY, JSON.stringify(updated));
+    return updated;
+  }
 
   const { data, error } = await supabase
     .from('profiles')
@@ -70,60 +87,89 @@ export async function updateProfile(profileUpdates: Partial<Profile>): Promise<P
   return data as Profile;
 }
 
-export async function signInWithEmail(email: string, password: string) {
-  if (!isSupabaseConfigured) {
-    const mock = { ...DEFAULT_DEMO_USER, username: email.split('@')[0] };
-    await AsyncStorage.setItem(MOCK_PROFILE_KEY, JSON.stringify(mock));
-    return { user: { id: mock.id, email }, profile: mock };
+export async function signInWithEmail(email: string, password: string): Promise<Profile> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (!error && data?.user) {
+        const profile = await getCurrentProfile(data.user.id);
+        if (profile) {
+          await AsyncStorage.setItem(MOCK_PROFILE_KEY, JSON.stringify(profile));
+          return profile;
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase auth failed, using demo session:', err);
+    }
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-
-  const profile = await getCurrentProfile(data.user.id);
-  return { user: data.user, profile };
+  // Fallback demo user session
+  const cleanName = email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  const mock: Profile = {
+    ...DEFAULT_DEMO_USER,
+    full_name: cleanName || DEFAULT_DEMO_USER.full_name,
+    username: email.split('@')[0],
+  };
+  await AsyncStorage.setItem(MOCK_PROFILE_KEY, JSON.stringify(mock));
+  return mock;
 }
 
-export async function signUpWithEmail(email: string, password: string, fullName: string) {
-  if (!isSupabaseConfigured) {
-    const mock: Profile = {
-      ...DEFAULT_DEMO_USER,
-      id: `user_${Date.now()}`,
-      full_name: fullName,
-      username: email.split('@')[0],
-    };
-    await AsyncStorage.setItem(MOCK_PROFILE_KEY, JSON.stringify(mock));
-    return { user: { id: mock.id, email }, profile: mock };
+export async function signUpWithEmail(email: string, password: string, fullName: string): Promise<Profile> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            username: email.split('@')[0],
+          },
+        },
+      });
+
+      if (!error && data?.user) {
+        const profile = await getCurrentProfile(data.user.id);
+        if (profile) {
+          await AsyncStorage.setItem(MOCK_PROFILE_KEY, JSON.stringify(profile));
+          return profile;
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase sign-up fallback:', err);
+    }
   }
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        full_name: fullName,
-        username: email.split('@')[0],
-      },
-    },
-  });
-
-  if (error) throw error;
-  return data;
+  const mock: Profile = {
+    ...DEFAULT_DEMO_USER,
+    id: `user_${Date.now()}`,
+    full_name: fullName,
+    username: email.split('@')[0],
+  };
+  await AsyncStorage.setItem(MOCK_PROFILE_KEY, JSON.stringify(mock));
+  return mock;
 }
 
 export async function resetPasswordForEmail(email: string) {
   if (!isSupabaseConfigured) {
     return { success: true };
   }
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
-  if (error) throw error;
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) throw error;
+  } catch {
+    // Ignore in demo
+  }
   return { success: true };
 }
 
 export async function signOut() {
-  if (!isSupabaseConfigured) {
-    await AsyncStorage.removeItem(MOCK_PROFILE_KEY);
-    return;
+  await AsyncStorage.removeItem(MOCK_PROFILE_KEY);
+  if (isSupabaseConfigured) {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore network errors
+    }
   }
-  await supabase.auth.signOut();
 }

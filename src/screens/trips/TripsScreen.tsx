@@ -20,6 +20,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getUserMatches, getDriverIncomingRequests } from '../../services/rideService';
 import { Match, RideRequest } from '../../types';
 import { formatDateOnly, formatTimeOnly, getRideTypeLabel } from '../../utils/formatters';
+import { DriverRequestsScreen } from './DriverRequestsScreen';
 
 export const TripsScreen = ({ navigation }: any) => {
   const { user } = useAuth();

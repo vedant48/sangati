@@ -38,7 +38,7 @@ export const LoginScreen = ({ navigation }: any) => {
     setError('');
     setLoading(true);
     try {
-      await login(email);
+      await login(email, password);
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {

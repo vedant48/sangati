@@ -42,12 +42,8 @@
         {
           "locationWhenInUsePermission": "Companion Ride uses your location to discover rides and companions travelling the same route."
         }
-      ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "companion-ride-prod-id"
-      }
-    }
+      ],
+      "expo-font"
+    ]
   }
 }
